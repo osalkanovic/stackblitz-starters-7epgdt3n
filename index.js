@@ -11,10 +11,10 @@ const zeroAddress = '0x0000000000000000000000000000000000000000';
 
 const outputFilePath = path.join(__dirname, 'mint_transactions.csv');
 
-// Header for CSV
+// Header for CSV - Removed 'Function'
 fs.writeFileSync(
   outputFilePath,
-  'Transaction Hash,Transaction Date,Function,Currency,Amount of Purchase,# $STAX Purchased,$STAX Sending Wallet,Buyer Receiving Wallet,Vesting Group\n',
+  'Transaction Hash,Transaction Date,Currency,Amount of Purchase,# $STAX Purchased,$STAX Sending Wallet,Buyer Receiving Wallet\n',
   'utf8'
 );
 
@@ -63,27 +63,32 @@ const main = async () => {
         value: tx.value,
       });
 
+      // Helper function to format numbers with comma as decimal separator
+      const formatAmount = (amount) => {
+        return parseFloat(amount).toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).replace(/\./g, '#').replace(/,/g, '.').replace(/#/g, ',');
+      };
+
       // Procesuiramo u zavisnosti od funkcije
       if (decodedInput.name === 'addGroup') {
         // addGroup funkcija - imamo više primalaca
         const [shareholderAddresses, shareholderMaxAmounts] = decodedInput.args;
-        const vestingGroup = txLogs[txHash][0].address; // Prvi log je kreiranje vesting grupe
 
         for (let i = 0; i < shareholderAddresses.length; i++) {
           const buyerAddress = shareholderAddresses[i];
-          const staxAmount = ethers.formatUnits(shareholderMaxAmounts[i], 9);
+          const staxAmount = formatAmount(ethers.formatUnits(shareholderMaxAmounts[i], 9));
 
           const row =
             [
               txHash,
               date,
-              'addGroup',
               'ETH',
-              0, // Nema ETH uplate za addGroup
+              formatAmount(0), // Nema ETH uplate za addGroup
               staxAmount,
               zeroAddress,
               buyerAddress,
-              vestingGroup,
             ]
               .map((v) => `"${v}"`) // CSV safe
               .join(',') + '\n';
@@ -92,20 +97,18 @@ const main = async () => {
         }
       } else if (decodedInput.name === 'addShareholder') {
         // addShareholder funkcija - jedan primalac
-        const [vestingGroup, buyerAddress, amount] = decodedInput.args;
-        const staxAmount = ethers.formatUnits(amount, 9);
+        const [, buyerAddress, amount] = decodedInput.args;
+        const staxAmount = formatAmount(ethers.formatUnits(amount, 9));
 
         const row =
           [
             txHash,
             date,
-            'addShareholder',
             'ETH',
-            0, // Nema ETH uplate za addShareholder
+            formatAmount(0), // Nema ETH uplate za addShareholder
             staxAmount,
             zeroAddress,
             buyerAddress,
-            vestingGroup,
           ]
             .map((v) => `"${v}"`) // CSV safe
             .join(',') + '\n';
@@ -114,24 +117,20 @@ const main = async () => {
       } else if (decodedInput.name === 'mint') {
         // Regularna mint funkcija sa ETH uplatom
         const [amount] = decodedInput.args;
-        const staxAmount = ethers.formatUnits(amount, 9);
-        const ethAmount = parseFloat(ethers.formatEther(tx.value));
+        const staxAmount = formatAmount(ethers.formatUnits(amount, 9));
+        const ethAmount = formatAmount(ethers.formatEther(tx.value));
 
-        // Uzimamo vesting grupu iz prvog loga (obično je to privateRound)
-        const vestingGroup = txLogs[txHash][0].topics[2].slice(26);
         const buyerAddress = tx.from;
 
         const row =
           [
             txHash,
             date,
-            'mint',
             'ETH',
             ethAmount,
             staxAmount,
             zeroAddress,
             buyerAddress,
-            `0x${vestingGroup}`,
           ]
             .map((v) => `"${v}"`) // CSV safe
             .join(',') + '\n';
@@ -140,23 +139,19 @@ const main = async () => {
       } else if (decodedInput.name === 'mintForShib') {
         // mintForShib funkcija - uplata u SHIB
         const [amount] = decodedInput.args;
-        const staxAmount = ethers.formatUnits(amount, 9);
+        const staxAmount = formatAmount(ethers.formatUnits(amount, 9));
 
-        // Uzimamo vesting grupu iz prvog loga (obično je to privateRound)
-        const vestingGroup = txLogs[txHash][0].topics[2].slice(26);
         const buyerAddress = tx.from;
 
         const row =
           [
             txHash,
             date,
-            'mintForShib',
             'SHIB',
-            0, // SHIB amount se ne može lako dobiti iz eventa
+            formatAmount(0), // SHIB amount se ne može lako dobiti iz eventa
             staxAmount,
             zeroAddress,
             buyerAddress,
-            `0x${vestingGroup}`,
           ]
             .map((v) => `"${v}"`) // CSV safe
             .join(',') + '\n';
