@@ -11,10 +11,10 @@ const zeroAddress = '0x0000000000000000000000000000000000000000';
 
 const outputFilePath = path.join(__dirname, 'mint_transactions.csv');
 
-// Header for CSV - Removed 'Function'
+// Header for CSV - Added 'Vesting Group Address'
 fs.writeFileSync(
   outputFilePath,
-  'Transaction Hash,Transaction Date,Currency,Amount of Purchase,# $STAX Purchased,$STAX Sending Wallet,Buyer Receiving Wallet\n',
+  'Transaction Hash,Transaction Date,Currency,Amount of Purchase,# $STAX Purchased,$STAX Sending Wallet,Buyer Receiving Wallet,Vesting Group Address\n',
   'utf8'
 );
 
@@ -50,11 +50,15 @@ const main = async () => {
     txLogs[log.transactionHash].push(log);
   }
 
+  // Define the common vesting group address for mint and mintForShib
+  const privateVestingGroupAddress = '0xe2EA50A2d1dc7413af66dd090040D9f453C0fA24'; // As per your contract description
+
   // Prolazimo kroz sve transakcije koje su imale mint eventove
   for (const txHash in txLogs) {
     const tx = await provider.getTransaction(txHash);
     const block = await provider.getBlock(tx.blockNumber);
     const date = new Date(block.timestamp * 1000).toISOString();
+    let vestingGroupAddress = ''; // Initialize vesting group address
 
     try {
       // Dekodiramo input podatke transakcije
@@ -73,6 +77,10 @@ const main = async () => {
 
       // Procesuiramo u zavisnosti od funkcije
       if (decodedInput.name === 'addGroup') {
+        const receipt = await provider.getTransactionReceipt(txHash);
+        // For addGroup, the contractAddress in the receipt is the newly created VestingContract
+        vestingGroupAddress = receipt.contractAddress || 'N/A';
+
         // addGroup funkcija - imamo više primalaca
         const [shareholderAddresses, shareholderMaxAmounts] = decodedInput.args;
 
@@ -89,6 +97,7 @@ const main = async () => {
               staxAmount,
               zeroAddress,
               buyerAddress,
+              vestingGroupAddress,
             ]
               .map((v) => `"${v}"`) // CSV safe
               .join(',') + '\n';
@@ -97,7 +106,8 @@ const main = async () => {
         }
       } else if (decodedInput.name === 'addShareholder') {
         // addShareholder funkcija - jedan primalac
-        const [, buyerAddress, amount] = decodedInput.args;
+        const [vgAddress, buyerAddress, amount] = decodedInput.args;
+        vestingGroupAddress = vgAddress; // Vesting group is an argument
         const staxAmount = formatAmount(ethers.formatUnits(amount, 9));
 
         const row =
@@ -109,6 +119,7 @@ const main = async () => {
             staxAmount,
             zeroAddress,
             buyerAddress,
+            vestingGroupAddress,
           ]
             .map((v) => `"${v}"`) // CSV safe
             .join(',') + '\n';
@@ -116,6 +127,7 @@ const main = async () => {
         fs.appendFileSync(outputFilePath, row, 'utf8');
       } else if (decodedInput.name === 'mint') {
         // Regularna mint funkcija sa ETH uplatom
+        vestingGroupAddress = privateVestingGroupAddress; // Uses the predefined private vesting group
         const [amount] = decodedInput.args;
         const staxAmount = formatAmount(ethers.formatUnits(amount, 9));
         const ethAmount = formatAmount(ethers.formatEther(tx.value));
@@ -131,6 +143,7 @@ const main = async () => {
             staxAmount,
             zeroAddress,
             buyerAddress,
+            vestingGroupAddress,
           ]
             .map((v) => `"${v}"`) // CSV safe
             .join(',') + '\n';
@@ -138,6 +151,7 @@ const main = async () => {
         fs.appendFileSync(outputFilePath, row, 'utf8');
       } else if (decodedInput.name === 'mintForShib') {
         // mintForShib funkcija - uplata u SHIB
+        vestingGroupAddress = privateVestingGroupAddress; // Uses the predefined private vesting group
         const [amount] = decodedInput.args;
         const staxAmount = formatAmount(ethers.formatUnits(amount, 9));
 
@@ -152,6 +166,7 @@ const main = async () => {
             staxAmount,
             zeroAddress,
             buyerAddress,
+            vestingGroupAddress,
           ]
             .map((v) => `"${v}"`) // CSV safe
             .join(',') + '\n';
